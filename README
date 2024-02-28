@@ -1,0 +1,12 @@
+sound plax
+
+is a demo in how to stream audio via html/js frontend using websockets to propagate stream
+
+# Requisites
+we assume elixir/erlang is installed
+
+# Create project
+``` 
+https://hexdocs.pm/phoenix/Mix.Tasks.Phx.New.html
+mix phx.new --no-ecto --no-mailer . --module SoundPlax
+``` 
