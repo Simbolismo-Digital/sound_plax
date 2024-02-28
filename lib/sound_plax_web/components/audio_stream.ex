@@ -4,7 +4,10 @@ defmodule SoundPlaxWeb.AudioStream do
   def render(assigns) do
     ~H"""
     <div class="audio_stream">
-      <h1>Microfone Stream</h1>
+      <b>Microfone Stream</b>
+
+        <p>fale e se ouça falando</p>
+
       <script>
         navigator.mediaDevices.getUserMedia({ audio: true })
           .then(function(stream) {
@@ -26,7 +29,7 @@ defmodule SoundPlaxWeb.AudioStream do
             gainNode.connect(audioCtx.destination);
 
             // Optional: Set the gain (volume)
-            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime); // Set volume to 50%
+            gainNode.gain.setValueAtTime(3.5, audioCtx.currentTime);
           })
           .catch(function(error) {
             console.error("Error accessing microphone:", error);
