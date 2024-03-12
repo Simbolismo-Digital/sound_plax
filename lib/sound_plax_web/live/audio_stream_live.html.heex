@@ -13,41 +13,60 @@ Hi Process <%= @pid %>
         let it_play = 0;
         const audioChunks = [];
         const audioMatrix = [];
-        function playChunks() {
-            <%!-- clean memory for garbage collection && please check sync with it_sent --%>
-            <%!-- if (audioMatrix.length > 200) { audioMatrix.splice(0, audioMatrix.length - 20); it_sent = 0; it_play = 0; } --%>
+        const reader = new FileReader();
+        reader.onloadend = () => {
+                const base64Data = reader.result.split(',')[1];
+                roomChannel.push("send_audio_data", {body: base64Data});
+                it_play++;
+            };
+        function sendAudioData(data) {
+            console.log("send_audio_data ", data);
+            let audioBlob = new Blob(data);
+            reader.readAsDataURL(audioBlob);
+        }
+        
+        <%!-- function playChunks() {
+            clean memory for garbage collection && please check sync with it_sent
+            if (audioMatrix.length > 200) { audioMatrix.splice(0, audioMatrix.length - 20); it_sent = 0; it_play = 0; }
             let audioBlob = new Blob(audioMatrix[it_play]);
             console.log("Playing track", it_play);
             let audioUrl = URL.createObjectURL(audioBlob);               
             let audio = new Audio(audioUrl);
             console.log(audioUrl);
-            audio.oncanplaythrough = (e) => { console.log("loaded"); audio.play() };
-            audio.onended = (e) => { console.log("end"); URL.revokeObjectURL(audio.src); it_play += 1 };
-        }
+            audio.oncanplaythrough = (e) => {
+                console.log("loaded");
+                audio.play();
+            };
+            audio.onended = (e) => {
+                console.log("end");
+                URL.revokeObjectURL(audio.src);
+                it_play += 1;
+            };
+        } --%>
         navigator.mediaDevices.getUserMedia({ audio: true })
         .then(stream => {
             const mediaRecorder = new MediaRecorder(stream);
             mediaRecorder.addEventListener("dataavailable", event => {
                 audioChunks.push(event.data);
             });
+
+            audioStreamSocket.onMessage(({event, payload}) => {
+                console.log("Receiving", event);
+            });
+
             mediaRecorder.start();
 
             setInterval(() => {               
                 mediaRecorder.stop();
                 audioMatrix[it_play] = audioChunks.splice(0, audioChunks.length);
                 mediaRecorder.start();
-                playChunks();
+                <%!-- playChunks(); --%>
+                sendAudioData(audioMatrix[it_play]);
             }, 250);
 
         })
         .catch(function(error) {
             console.error("Error accessing microphone:", error);
         });
-
-
-        function sendAudioData(event) {
-            console.log("Received ", event);
-            const audioChunks = [event.data];
-        }
       </script>
 </div>
