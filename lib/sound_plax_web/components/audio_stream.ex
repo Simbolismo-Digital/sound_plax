@@ -6,7 +6,7 @@ defmodule SoundPlaxWeb.AudioStream do
     <div class="audio_stream">
       <b>Microfone Stream</b>
 
-        <p>fale e se ouça falando</p>
+      <p>fale e se ouça falando</p>
 
       <script>
         navigator.mediaDevices.getUserMedia({ audio: true })

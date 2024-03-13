@@ -3,6 +3,7 @@ defmodule SoundPlaxWeb.AudioStreamLive do
 
   def mount(_assigns, _session, socket) do
     pid = inspect(self())
+
     {
       :ok,
       socket
