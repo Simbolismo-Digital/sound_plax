@@ -12,9 +12,9 @@ defmodule SoundPlaxWeb.RoomChannel do
   #   {:error, %{reason: "unauthorized"}}
   # end
 
-  def handle_in("send_audio_data", %{"body" => body}, socket) do
+  def handle_in("send_audio_data", %{"user" => user, "body" => body}, socket) do
     Logger.warning("Broadcasting")
-    broadcast!(socket, "room:lobby:broadcast_audio_data", %{body: body})
+    broadcast!(socket, "room:lobby:broadcast_audio_data", %{user: user, body: body})
     {:noreply, socket}
   end
 end
