@@ -9,38 +9,41 @@ Hi Process <%= @pid %>
   <p>fale e se ouça falando</p>
 
   <script>
-    let it_sent = 0;
-    const audioChunks = [];
-    const audioMatrix = [];
-    const audioPlay = [];
+    const audioBuffer = [];
+    const audioElement = new Audio();
+    const play = () => {
+        audioElement.src = `data:audio/webm;base64,${audioBuffer.shift()}`;
+        audioElement.play();
+    }
+    audioElement.onended = () => {
+        if (audioBuffer.length) play();
+    }
+    
     const reader = new FileReader();
     reader.onloadend = () => {
             const base64Data = reader.result.split(',')[1];
             roomChannel.push("send_audio_data", {body: base64Data});
-            it_sent++;
         };
     function sendAudioData(data) {
         console.log("send_audio_data ", data);
-        let audioBlob = new Blob(data);
-        reader.readAsDataURL(audioBlob);
+        reader.readAsDataURL(data);
     }
 
     navigator.mediaDevices.getUserMedia({ audio: true })
     .then(stream => {
         const mediaRecorder = new MediaRecorder(stream);
         mediaRecorder.addEventListener("dataavailable", event => {
-            audioChunks.push(event.data);
+            sendAudioData(event.data);
         });
 
         audioStreamSocket.onMessage(({event, payload}) => {
             console.log("Receiving", event);
             if (event === "room:lobby:broadcast_audio_data") {
-                const audioElement = new Audio();
-                const audioMimeType = "audio/webm";
-
-                console.log("playit", payload.body);
-                audioElement.src = `data:${audioMimeType};base64,${payload.body}`;
-                audioElement.play();
+                audioBuffer.push(payload.body);
+                // first data play
+                if (! (audioBuffer.length - 1)) {
+                    play();
+                }
             }
         });
 
@@ -48,12 +51,8 @@ Hi Process <%= @pid %>
 
         setInterval(() => {               
             mediaRecorder.stop();
-            audioMatrix[it_sent] = audioChunks.splice(0, audioChunks.length);
             mediaRecorder.start();
-            <%!-- playChunks(); --%>
-            sendAudioData(audioMatrix[it_sent]);
         }, 250);
-
     })
     .catch(function(error) {
         console.error("Error accessing microphone:", error);
