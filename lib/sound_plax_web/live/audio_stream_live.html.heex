@@ -10,6 +10,7 @@ Hi Process <%= @pid %>
 
   <script>
     let listenCurrentUser = false;
+    listenCurrentUser = true;
 
     const currentUser = Date();
 
@@ -22,26 +23,33 @@ Hi Process <%= @pid %>
         } else {
             channel = {
                 audioBuffer: [],
-                audioPlayer: new Audio()
-            };
-            channel.audioPlayer.onended = () => {
-                if (channel.audioBuffer.length) play(channel);
+                audioContext: new (window.AudioContext || window.webkitAudioContext)()
             };
             users[user] = channel;
             return channel;
         }
     }
-    // unconditional play
+    // unconditional play PCM data
     const play = (channel) => {
-        console.log(channel);
-        channel.audioPlayer.src = `data:audio/webm;base64,${channel.audioBuffer.shift()}`;
-        channel.audioPlayer.play();
+        const audioContext = channel.audioContext;
+        const audioData = deserializePCM(channel.audioBuffer.shift());
+        const audioBuffer = audioContext.createBuffer(1, audioData.byteLength / 2, audioContext.sampleRate);
+        const channelData = audioBuffer.getChannelData(0);
+        const view = new DataView(audioData);
+        for (let i = 0; i < audioData.byteLength / 2; i++) {
+            const sample = view.getInt16(i * 2, true); // true for little-endian
+            channelData[i] = sample / 0x7FFF; // Convert back to range -1 to 1
+        }
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+        source.start();
     }
     // buffer and play if its the first
-    const bufferAndStart = (user, audioBlob) => {
+    const bufferAndStart = (user, audioPCM) => {
         if (user != currentUser || listenCurrentUser) {
             channel = retrieveChannel(user);
-            channel.audioBuffer.push(audioBlob);
+            channel.audioBuffer.push(audioPCM);
             // start play if first data
             if (! (channel.audioBuffer.length - 1)) {
                 play(channel);
@@ -49,46 +57,73 @@ Hi Process <%= @pid %>
         }
     }
 
-    // serialize Blob to base64
-    const reader = new FileReader();
-    reader.onloadend = () => {
-        const base64Data = reader.result.split(',')[1];
-        // (pre declared channel)
-        roomChannel.push("send_audio_data", {user: currentUser, body: base64Data});
-    };
-    // send audio
-    function sendAudioData(audioBlob) {
-        console.log("send_audio_data ", audioBlob);
-        reader.readAsDataURL(audioBlob);
+    function encodePCM(audioData) {
+        const buffer = new ArrayBuffer(audioData.length * 2); // 16-bit PCM
+        const view = new DataView(buffer);
+        for (let i = 0; i < audioData.length; i++) {
+            let sample = audioData[i];
+            // Clamp values between -1 and 1
+            sample = Math.max(-1, Math.min(1, sample));
+            // Convert to 16-bit PCM (range -32768 to 32767)
+            view.setInt16(i * 2, sample * 0x7FFF, true); // true for little-endian
+        }
+        return buffer;
     }
 
-    // request audio
-    navigator.mediaDevices.getUserMedia({ audio: true })
-    .then(stream => {
-        // initialize stream
-        const mediaRecorder = new MediaRecorder(stream);
-        
-        // on data 
-        mediaRecorder.addEventListener("dataavailable", event => {
-            const audioBlob = event.data;
-            sendAudioData(audioBlob);
-        });
+    // Function to serialize PCM audio data
+    function serializePCM(audioData) {
+        const bytes = new Uint8Array(audioData.byteLength);
+        const view = new DataView(audioData);
+        for (let i = 0; i < view.byteLength; i++) {
+            bytes[i] = view.getUint8(i);
+        }
+        return bytes;
+    }
 
-        // receive packages from network (pre declared audioStreamSocket)
-        audioStreamSocket.onMessage(({event, payload}) => {
-            console.log("Receiving", payload.user, event);
-            if (event === "room:lobby:broadcast_audio_data") bufferAndStart(payload.user, payload.body);
-        });
+    // Function to deserialize PCM audio data
+    function deserializePCM(serializedData) {
+        const length = Object.keys(serializedData).length;
+        const buffer = new ArrayBuffer(length);
+        const view = new DataView(buffer);
 
-        // start recording process
-        mediaRecorder.start();
+        for (let i = 0; i < length; i++) {
+            view.setUint8(i, serializedData[i]);
+        }
+        return buffer;
+    }
 
-        // complete webm/audio packet from second to second
-        setInterval(() => {               
-            mediaRecorder.stop();
-            mediaRecorder.start();
+        // Get user media stream for audio input
+        navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+            const recorderContext = new (window.AudioContext || window.webkitAudioContext)();
+
+            // Create media stream source node
+            const source = recorderContext.createMediaStreamSource(stream);
+            
+            // Create script processor node to process audio data
+            const scriptNode = recorderContext.createScriptProcessor(4096, 1, 1);
+
+            // Process audio data
+            scriptNode.onaudioprocess = function(event) {
+                const audioData = event.inputBuffer.getChannelData(0); // Get audio data
+                const encodedData = encodePCM(audioData); // Encode audio data
+                const serializedData = serializePCM(encodedData);
+                roomChannel.push("send_audio_data", {user: currentUser, body: serializedData}); // Send audio data over WebSocket
+            };
+
+            // Connect nodes
+            source.connect(scriptNode);
+            scriptNode.connect(recorderContext.destination);
+
+
+        setTimeout(() => {
+            // receive packages from network (pre declared audioStreamSocket)
+            audioStreamSocket.onMessage(({event, payload}) => {
+                console.log("Receiving", payload.user, event);
+                if (event === "room:lobby:broadcast_audio_data") bufferAndStart(payload.user, payload.body);
+            });
         }, 1000);
-    })
+        })
     .catch(function(error) {
         console.error("Error accessing microphone:", error);
     });
