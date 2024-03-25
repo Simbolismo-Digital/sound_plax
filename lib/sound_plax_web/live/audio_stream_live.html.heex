@@ -1,0 +1,96 @@
+<%!-- tutorials on know how to audio --%>
+<%!-- https://developer.mozilla.org/en-US/docs/Web/API/MediaStream_Recording_API/Using_the_MediaStream_Recording_API --%>
+Hi Process <%= @pid %>
+
+<div class="audio_stream">
+  <br />
+  <b>Microfone Stream</b>
+
+  <p>fale e se ouça falando</p>
+
+  <script>
+    let listenCurrentUser = false;
+
+    const currentUser = Date();
+
+    const users = {};
+
+    // split user channels
+    const retrieveChannel = (user) => {
+        if (user in users) {
+            return users[user];
+        } else {
+            channel = {
+                audioBuffer: [],
+                audioPlayer: new Audio()
+            };
+            channel.audioPlayer.onended = () => {
+                if (channel.audioBuffer.length) play(channel);
+            };
+            users[user] = channel;
+            return channel;
+        }
+    }
+    // unconditional play
+    const play = (channel) => {
+        console.log(channel);
+        channel.audioPlayer.src = `data:audio/webm;base64,${channel.audioBuffer.shift()}`;
+        channel.audioPlayer.play();
+    }
+    // buffer and play if its the first
+    const bufferAndStart = (user, audioBlob) => {
+        if (user != currentUser || listenCurrentUser) {
+            channel = retrieveChannel(user);
+            channel.audioBuffer.push(audioBlob);
+            // start play if first data
+            if (! (channel.audioBuffer.length - 1)) {
+                play(channel);
+            }
+        }
+    }
+
+    // serialize Blob to base64
+    const reader = new FileReader();
+    reader.onloadend = () => {
+        const base64Data = reader.result.split(',')[1];
+        // (pre declared channel)
+        roomChannel.push("send_audio_data", {user: currentUser, body: base64Data});
+    };
+    // send audio
+    function sendAudioData(audioBlob) {
+        console.log("send_audio_data ", audioBlob);
+        reader.readAsDataURL(audioBlob);
+    }
+
+    // request audio
+    navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(stream => {
+        // initialize stream
+        const mediaRecorder = new MediaRecorder(stream);
+        
+        // on data 
+        mediaRecorder.addEventListener("dataavailable", event => {
+            const audioBlob = event.data;
+            sendAudioData(audioBlob);
+        });
+
+        // receive packages from network (pre declared audioStreamSocket)
+        audioStreamSocket.onMessage(({event, payload}) => {
+            console.log("Receiving", payload.user, event);
+            if (event === "room:lobby:broadcast_audio_data") bufferAndStart(payload.user, payload.body);
+        });
+
+        // start recording process
+        mediaRecorder.start();
+
+        // complete webm/audio packet from second to second
+        setInterval(() => {               
+            mediaRecorder.stop();
+            mediaRecorder.start();
+        }, 1000);
+    })
+    .catch(function(error) {
+        console.error("Error accessing microphone:", error);
+    });
+  </script>
+</div>

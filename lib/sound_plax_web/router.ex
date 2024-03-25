@@ -17,6 +17,7 @@ defmodule SoundPlaxWeb.Router do
   scope "/", SoundPlaxWeb do
     pipe_through :browser
 
+    live "/stream", AudioStreamLive, :index
     get "/", PageController, :home
   end
 
