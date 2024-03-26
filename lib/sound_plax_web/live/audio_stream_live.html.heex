@@ -40,14 +40,12 @@ Hi Process <%= @pid %>
         channel.audioPlayer.play();
     }
     // buffer and play if its the first
-    const bufferAndStart = (user, audioBlob) => {
-        if (user != currentUser || listenCurrentUser) {
-            channel = retrieveChannel(user);
-            channel.audioBuffer.push(audioBlob);
-            // start play if first data
-            if (! (channel.audioBuffer.length - 1)) {
-                play(channel);
-            }
+    const bufferAndStart = (user, base64Data) => {
+        channel = retrieveChannel(user);
+        channel.audioBuffer.push(base64Data);
+        // start play if first data
+        if (! (channel.audioBuffer.length - 1)) {
+            play(channel);
         }
     }
 
@@ -57,6 +55,8 @@ Hi Process <%= @pid %>
         const base64Data = base64Parser.result.split(',')[1];
         // (pre declared channel)
         roomChannel.push("send_audio_data", {user: currentUser, body: base64Data});
+
+        if (listenCurrentUser) bufferAndStart(currentUser, base64Data);
     };
     // send audio
     function sendAudioData(audioBlob) {
