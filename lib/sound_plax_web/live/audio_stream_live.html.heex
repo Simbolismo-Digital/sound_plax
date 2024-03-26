@@ -15,6 +15,8 @@ Hi Process <%= @pid %>
 
     const users = {};
 
+    const sendBuffer = [];
+
     // split user channels
     const retrieveChannel = (user) => {
         if (user in users) {
@@ -50,16 +52,42 @@ Hi Process <%= @pid %>
     }
 
     // serialize Blob to base64
-    const reader = new FileReader();
-    reader.onloadend = () => {
-        const base64Data = reader.result.split(',')[1];
+    const base64Parser = new FileReader();
+    base64Parser.onloadend = () => {
+        const base64Data = base64Parser.result.split(',')[1];
         // (pre declared channel)
         roomChannel.push("send_audio_data", {user: currentUser, body: base64Data});
     };
     // send audio
     function sendAudioData(audioBlob) {
         console.log("send_audio_data ", audioBlob);
-        reader.readAsDataURL(audioBlob);
+        base64Parser.readAsDataURL(audioBlob);
+    }
+
+    // detect Blob silence
+    const audioContext = new AudioContext();
+    const silenceDetector = new FileReader();
+    const silenceThreshold = 0.02;
+    silenceDetector.onloadend = () => {
+        const audioData = silenceDetector.result;
+
+         audioContext.decodeAudioData(audioData, (buffer) => {
+            const channelData = buffer.getChannelData(0); // Assuming mono audio
+            const absolute = channelData.map(Math.abs);
+            const volumePeak = Math.max(...absolute);
+            const isSilent = volumePeak <= silenceThreshold;
+
+            if (isSilent) {
+                console.log("Silence detected in audioBlob");
+                sendBuffer.shift();
+            } else {
+                console.log("Sound detected in audioBlob");
+                sendAudioData(sendBuffer.shift());
+            }
+        });
+    }
+    function detectSilecente(audioBlob) {
+        silenceDetector.readAsArrayBuffer(audioBlob);
     }
 
     // request audio
@@ -71,7 +99,8 @@ Hi Process <%= @pid %>
         // on data 
         mediaRecorder.addEventListener("dataavailable", event => {
             const audioBlob = event.data;
-            sendAudioData(audioBlob);
+            sendBuffer.push(audioBlob);
+            detectSilecente(audioBlob);
         });
 
         // receive packages from network (pre declared audioStreamSocket)
